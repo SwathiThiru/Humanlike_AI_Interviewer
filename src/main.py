@@ -3,13 +3,14 @@ import argparse
 import logging
 from pathlib import Path
 from data_parser import extract_text
+from rag import build_rag_index, retrieve_chunks
 
 SUPPORTED_EXTS = {".pdf",".txt",".md"}
 
-def find_files(directory: Path):
-    """
-    Return all files in 'directory' with supported extensions
-    """
+"""def find_files(directory: Path):
+    
+    # Return all files in 'directory' with supported extensions
+
     if not directory.is_dir():
         raise ValueError(f"Directory not found: {directory}")
     return sorted(
@@ -18,10 +19,10 @@ def find_files(directory: Path):
     )
 
 def load_documents(dir_path:Path):
-    """
-    Extract text from every supported file under dir_path
     
-    """
+    #Extract text from every supported file under dir_path
+    
+
     docs = {}
     for file_path in find_files(dir_path):
         logging.info(f"Parsing {file_path.name}")
@@ -30,55 +31,68 @@ def load_documents(dir_path:Path):
     return docs
 
 def preview_docs(docs: dict, preview_chars: int = 500):
-    """Print the first `preview_chars` of each document."""
+    #Print the first `preview_chars` of each document.
     for name, text in docs.items():
         separator = "-" * 5 + f" {name} " + "-" * 5
         print(separator)
         print(text[:preview_chars].replace("\n", " "))
         print()
+"""
 
+def validate_file(path_str: str) -> Path:
+    path = Path(path_str)
+    if not path.is_file():
+        raise argparse.ArgumentTypeError(f"File not found: {path}")
+    return path
+    
 
-def main(resume_dir: Path, jd_dir: Path, preview: bool):
+def main(resume_file: Path, jd_file: Path, query: str, preview: bool):
     # 1) Load and parse
-    resumes = load_documents(resume_dir)
-    jds = load_documents(jd_dir)
+    #resumes = load_documents(resume_dir)
+    #jds = load_documents(jd_dir)
+     # Pass resumes & JDs into RAG pipeline
+    logging.info(f"Parsing Resume: {resume_file}")
+    resume_text = extract_text(str(resume_file))
     
-    # 2) Pass resumes & JDs into RAG pipeline
+    logging.info(f"Parsing the Job description: {jd_file}")
+    jd_text = extract_text(str(jd_file))
     
-    # 3) Quick console preview
     if preview:
-        print("\n=== Resumes ===\n")
-        preview_docs(resumes)
-        print("\n=== Job Descriptions ===\n")
-        preview_docs(jds)
+        print("\n=== Resume Preview ====\n")
+        print(resume_text[:500].replace("\n", " "))
+        print("\n=== JD Preview ===\n")
+        print(jd_text[:500].replace("\n", " "))
         
-if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s     %(message)s"
-    )
+    # Build the RAG index for resume-JD pair
+    vectorstore = build_rag_index(resume_text, jd_text)
     
-    parser = argparse.ArgumentParser(
-        description="Parse all resumes and job descriptions in two folders."
+    # Test RAG retrieval
+    logging.info(f"Retrieving top chunks for query: {query}")
+    chunks = retrieve_chunks(query, vectorstore)
+    print("\n=== Retrieved Chunks ===")
+    for i, c in enumerate(chunks, 1):
+        print(f"[{i}] {c}\n")
+    print(f"Total retrieved chunks: {len(chunks)}")
+    
+    # Generate and print personalized question
+    # Make use of LLM
+        
+    
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO,
+                        format="%(asctime)s %(levelname)s %(message)s")
+    p = argparse.ArgumentParser(
+        description="Prototype: generate a personalized question from one resume+JD"
     )
-    parser.add_argument(
-        "--resume-dir",
-        type=Path,
-        default=Path("resume"),
-        help="Folder containing resume files"
-    )
-    parser.add_argument(
-        "--jd-dir",
-        type=Path,
-        default=Path("job_description"),
-        help="Folder containing job description files"
-    )
-    parser.add_argument(
-        "--no-preview",
-        action="store_false",
-        dest="preview",
-        help="Skip printing text previews"
-    )
-    args = parser.parse_args()
+    p.add_argument("resume_file", type=validate_file,
+                   help="Path to resume (.pdf/.txt/.md)")
+    p.add_argument("jd_file", type=validate_file,
+                   help="Path to job description (.pdf/.txt/.md)")
+    p.add_argument("query",
+                   type=str,
+                   help="Query string to retrieve relevant chunks for testing RAG")
+    p.add_argument("--no-preview", action="store_false", dest="preview",
+                   help="Skip printing previews")
+    args = p.parse_args()
 
-    main(args.resume_dir, args.jd_dir, args.preview)
+    main(args.resume_file, args.jd_file, args.query, args.preview)
