@@ -1,8 +1,12 @@
 import os
 import time
 
-from data_parser import extract_text_from_pdf
-
+from data_parser import load_and_clean_pdf, chunk_text
+from embeddings import VectorStore
+from retriever import build_index
+from llm import generate_question
+from tts import text_to_speech
+from stt import transcribe
 
 def main():
     # Need to configure the inputs here when we have an web interface/application
@@ -15,17 +19,36 @@ def main():
     jd_path = os.path.join('..', 'job_description', jd_name)
 
     # Section 1 : Parse the Documents
-    # lets create a modular project
+    resume_text = load_and_clean_pdf(resume_path)
+    jd_text = load_and_clean_pdf(jd_path)
 
-    # Extract the text content from the PDF file
-    resume_text = extract_text_from_pdf(resume_path)
-    jd_text = extract_text_from_pdf(jd_path)
+    # Section 2 : create chunks
+    resume_chunks = chunk_text(resume_text)
+    jd_chunks = chunk_text(jd_text)
 
-    # Section 2 : Implement RAG
+    # Section 3 : Build vector store
+    store = VectorStore()
+    store.add(resume_chunks + jd_chunks)
+    build_index(resume_chunks, jd_chunks)
 
-    # Section 3 : LLM generates question
+    combined = resume_text + jd_text
 
-    # Section 4 : And so on...
+    # Section 4 : start with interview
+    interview_duration = interview_duration * 60
+    start = time.time()
+    qa_pairs = []
+
+    interview_questions = generate_question("initial", combined)
+
+    while True:
+        elapsed = time.time() - start
+        if elapsed > interview_duration:
+            print("Time’s up")
+            break
+
+        # Section 5 : ask questions
+        question_audio = text_to_speech(interview_questions)
+
 
 
 if __name__ == "__main__":
